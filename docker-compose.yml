@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # 1. Base de données Centrale (PostgreSQL + Extension Géospatiale)
+  postgres-db:
+    image: postgis/postgis:15-3.3-alpine
+    container_name: logistics-db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: logistics_db
+    ports:
+      - "5434:5432"
+    networks:
+      - logistics-network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # 2. Interface graphique pour gérer la BDD 
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: logistics-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@smartlogistics.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres-db
+    networks:
+      - logistics-network
+
+  # 3. Message Broker (RabbitMQ) pour la communication asynchrone
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: logistics-broker
+    ports:
+      - "5672:5672"      # Port pour la communication Java/Python
+      - "15672:15672"    # Interface web de management
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    networks:
+      - logistics-network
+
+networks:
+  logistics-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

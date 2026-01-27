@@ -1,0 +1,28 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: order-service
+  
+  # Configuration Base de Données
+  datasource:
+    url: jdbc:postgresql://localhost:5434/logistics_db
+    username: admin
+    password: password123
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  # Configuration RabbitMQ (NOUVEAU)
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
