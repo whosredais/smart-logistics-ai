@@ -28,6 +28,8 @@ public class Order {
     private OrderStatus status;
 
     private BigDecimal price;
+    
+    private Integer deliveryIndex;
 
     private LocalDateTime createdAt;
 

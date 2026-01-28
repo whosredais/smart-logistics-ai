@@ -45,8 +45,15 @@ public class OrderController {
     public ResponseEntity<Order> updateOrderZone(@PathVariable Long id, @RequestBody java.util.Map<String, Integer> payload) {
         return orderRepository.findById(id)
                 .map(order -> {
-                    order.setZoneId(payload.get("zoneId")); // On change la zone
-                    order.setStatus(com.smartlogistics.order_service.model.OrderStatus.ASSIGNED); // On change le statut
+                    if(payload.containsKey("zoneId")) {
+                        order.setZoneId(payload.get("zoneId"));
+                    }
+                    
+                    if(payload.containsKey("deliveryIndex")) {
+                        order.setDeliveryIndex(payload.get("deliveryIndex"));
+                    }
+                    
+                    order.setStatus(com.smartlogistics.order_service.model.OrderStatus.ASSIGNED);
                     return ResponseEntity.ok(orderRepository.save(order));
                 })
                 .orElse(ResponseEntity.notFound().build());

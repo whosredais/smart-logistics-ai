@@ -9,10 +9,10 @@ Une plateforme logistique intelligente utilisant une architecture Microservices 
 * **Real-Time Dashboard :** Visualisation interactive sur carte (Next.js + Leaflet).
 * **Infrastructure :** Dockerisation complète (PostgreSQL + PostGIS, RabbitMQ).
 
-## 🗺️ Roadmap (Prochaines étapes)
-* [ ] **Routing Intelligent (TSP) :** Calcul du chemin optimal intra-zone.
-* [ ] **Fleet Service :** Gestion de la disponibilité des livreurs.
-* [ ] **WebSockets :** Suivi temps réel sans polling.
+## 🗺️ Roadmap & Fonctionnalités Avancées
+- [x] **Routing Intelligent (TSP) :** Implémentation de l'algorithme "Nearest Neighbor" pour tracer le chemin optimal entre les livraisons d'une même zone.
+- [ ] **Fleet Service :** Gestion de la disponibilité des livreurs.
+- [ ] **WebSockets :** Suivi temps réel sans polling.
 
 ## 🛠️ Tech Stack
 * **Backend :** Spring Boot 3 (Java 21)
