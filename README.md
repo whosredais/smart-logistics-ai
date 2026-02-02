@@ -52,17 +52,15 @@ Le projet est entièrement "Dockerisé". Vous n'avez besoin que de Docker instal
 
 
 ## 🧪 Tester l'Intelligence Artificielle
-   Une fois le Dashboard ouvert, simulez des commandes via l'API (ou Postman/Curl) pour voir l'IA réagir en direct :
-    
-   # 1. Commande Nord (Zone 1)
+
+Une fois le Dashboard ouvert, simulez des commandes via l'API (ou Postman/Curl) pour voir l'IA réagir en direct :
+
+###  Commandes  
+```bash
 curl -X POST http://localhost:8081/api/orders -H "Content-Type: application/json" -d "{\"customerName\": \"Casa Port\", \"latitude\": 33.5950, \"longitude\": -7.6180, \"price\": 100}"
-
-# 2. Commande Sud (Zone 0)
 curl -X POST http://localhost:8081/api/orders -H "Content-Type: application/json" -d "{\"customerName\": \"Sidi Maarouf\", \"latitude\": 33.5200, \"longitude\": -7.6400, \"price\": 200}"
-
-# 3. Commande Centre (Zone 1) -> Déclenche l'optimisation
 curl -X POST http://localhost:8081/api/orders -H "Content-Type: application/json" -d "{\"customerName\": \"2 Mars\", \"latitude\": 33.5600, \"longitude\": -7.6100, \"price\": 150}"
-   
+```
    👀 Observez le Dashboard : Les points vont s'afficher, changer de couleur, être reliés par une route optimale, et le livreur (Karim/Sarah) sera assigné automatiquement.
 
    
