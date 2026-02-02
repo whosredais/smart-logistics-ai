@@ -43,9 +43,25 @@ services:
     networks:
       - logistics-network
 
+  # 4. Base de données pour le Fleet Service 
+  postgres-fleet:
+    image: postgis/postgis:15-3.3-alpine
+    container_name: fleet-db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: fleet_db
+    ports:
+      - "5435:5432" 
+    networks:
+      - logistics-network
+    volumes:
+      - fleet_data:/var/lib/postgresql/data    
+
 networks:
   logistics-network:
     driver: bridge
 
 volumes:
   postgres_data:
+  fleet_data:

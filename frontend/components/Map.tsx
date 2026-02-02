@@ -40,6 +40,7 @@ interface Order {
     price: number;
     zoneId?: number;       // La zone calculée par K-Means
     deliveryIndex?: number; // L'ordre de passage calculé par TSP
+    driverName?: string;    // Le nom du livreur assigné (NOUVEAU)
 }
 
 const MapComponent = () => {
@@ -121,6 +122,13 @@ const MapComponent = () => {
                                 <p className="font-bold text-lg my-1">
                                     📦 Stop N° {order.deliveryIndex}
                                 </p>
+                            )}
+
+                            {/* ---  Affichage du Livreur --- */}
+                            {order.driverName && (
+                                <div className="mt-2 p-1 bg-gray-100 rounded text-xs border border-gray-200">
+                                    🚚 Livré par : <strong>{order.driverName}</strong>
+                                </div>
                             )}
                             
                             <hr className="my-2"/>

@@ -4,7 +4,7 @@ import time
 import numpy as np
 import requests
 from sklearn.cluster import KMeans
-from scipy.spatial.distance import cdist # Pour calculer les distances
+from scipy.spatial.distance import cdist
 
 # CONFIGURATION
 RABBITMQ_HOST = 'localhost'
@@ -15,122 +15,102 @@ N_CLUSTERS = 2
 orders_buffer = []
 
 def solve_tsp_nearest_neighbor(points):
-    """
-    Algorithme du plus proche voisin.
-    Entrée: liste de coordonnées [[lat, lon], [lat, lon]...]
-    Sortie: liste des indices ordonnés [0, 2, 1...]
-    """
-    if len(points) == 0:
-        return []
-    
-    # On commence par le premier point de la liste (arbitraire)
+    """ Algorithme TSP (Voyageur de commerce) """
+    if len(points) == 0: return []
     current_idx = 0
     path = [current_idx]
     visited = {current_idx}
-    
     while len(visited) < len(points):
         last_point = points[current_idx].reshape(1, -1)
-        
-        # Calculer les distances vers tous les autres points
         distances = cdist(last_point, points, metric='euclidean')[0]
-        
-        # Mettre une distance infinie pour les points déjà visités (pour ne pas les rechoisir)
         for i in range(len(points)):
-            if i in visited:
-                distances[i] = np.inf
-        
-        # Trouver le plus proche
+            if i in visited: distances[i] = np.inf
         nearest_idx = np.argmin(distances)
-        
-        # Ajouter au chemin
         path.append(nearest_idx)
         visited.add(nearest_idx)
         current_idx = nearest_idx
-        
     return path
 
 def process_batch():
-    print(f"\n--- 🧠 LANCEMENT DE L'OPTIMISATION IA (K-Means + TSP) ---")
+    print(f"\n--- 🧠 LANCEMENT DE L'OPTIMISATION IA (K-Means + TSP + Fleet) ---")
     
-    if not orders_buffer:
-        return
+    if not orders_buffer: return
 
-    # 1. K-Means pour faire les Zones
+    # 1. K-Means
     coords = np.array([[o['latitude'], o['longitude']] for o in orders_buffer])
     kmeans = KMeans(n_clusters=N_CLUSTERS, n_init=10)
     kmeans.fit(coords)
-    labels = kmeans.labels_ # ex: [0, 1, 0]
+    labels = kmeans.labels_
     
-    print(f"📊 Calcul des routes optimales...")
+    print(f"📊 Assignation intelligente...")
     
-    # 2. Pour chaque Zone, on calcule le chemin optimal (TSP)
     for zone_id in range(N_CLUSTERS):
-        # On récupère les indices des commandes qui sont dans cette zone
+        # 2. APPEL AU FLEET SERVICE (Nouveau !)
+        # On demande : "Qui est le chef de la Zone X ?"
+        driver_name = "En attente"
+        try:
+            fleet_url = f"http://localhost:8082/api/drivers/zone/{zone_id}"
+            resp = requests.get(fleet_url)
+            if resp.status_code == 200 and resp.json():
+                driver_data = resp.json()
+                driver_name = f"{driver_data['name']} ({driver_data['vehicle']})"
+            else:
+                driver_name = "Aucun livreur dispo"
+        except Exception as e:
+            print(f"  ⚠️ Erreur Fleet Service: {e}")
+
+        # 3. Calcul du trajet
         indices_in_zone = [i for i, label in enumerate(labels) if label == zone_id]
+        if not indices_in_zone: continue
         
-        if not indices_in_zone:
-            continue
-            
-        # On extrait les coordonnées de ces commandes
         zone_coords = coords[indices_in_zone]
-        
-        # On applique le TSP sur cette zone
         sorted_indices_local = solve_tsp_nearest_neighbor(zone_coords)
         
-        # 3. On sauvegarde le résultat en Java
-        print(f"  📍 Traitement Zone {zone_id} ({len(indices_in_zone)} commandes)")
+        print(f"  📍 Zone {zone_id} attribuée à : {driver_name}")
         
         for sequence_number, local_idx in enumerate(sorted_indices_local):
-            global_idx = indices_in_zone[local_idx] # Retrouver l'index d'origine
+            global_idx = indices_in_zone[local_idx]
             order = orders_buffer[global_idx]
             
-            # On envoie : La Zone + L'ordre de passage (deliveryIndex)
+            # 4. MISE À JOUR ORDER SERVICE
             try:
-                # Note: On triche un peu, on utilise le endpoint "zone" pour tout envoyer
-                # Idéalement il faudrait modifier l'API Java pour accepter un objet JSON plus complexe
-                # Mais pour aller vite, on va modifier OrderController pour lire "deliveryIndex" s'il existe
                 url = f"http://localhost:8081/api/orders/{order['id']}/zone"
                 payload = {
                     "zoneId": int(zone_id),
-                    "deliveryIndex": sequence_number + 1 # 1er, 2ème...
+                    "deliveryIndex": sequence_number + 1,
+                    "driverName": driver_name # On envoie le nom !
                 }
                 requests.put(url, json=payload)
-                print(f"    ✅ {sequence_number+1}. {order['customerName']}")
-                
+                print(f"    ✅ {sequence_number+1}. {order['customerName']} -> {driver_name}")
             except Exception as e:
-                print(f"    ❌ Erreur API: {e}")
+                print(f"    ❌ Erreur API Java: {e}")
 
     print("---------------------------------------------------\n")
     orders_buffer.clear()
-
 
 def process_order(ch, method, properties, body):
     try:
         data = json.loads(body)
         if isinstance(data, str): return
-
         print(f" [x] Reçu ID: {data.get('id')} - {data.get('customerName')}")
         orders_buffer.append(data)
-        
-        if len(orders_buffer) >= BATCH_SIZE:
-            process_batch()
-            
+        if len(orders_buffer) >= BATCH_SIZE: process_batch()
     except Exception as e:
         print(f" [!] Erreur: {e}")
 
 def start_consuming():
-    print(f" [*] IA (TSP Routing) en attente... (Batch: {BATCH_SIZE})")
+    print(f" [*] IA prête. En attente de commandes... (Batch: {BATCH_SIZE})")
     connection_params = pika.ConnectionParameters(host=RABBITMQ_HOST, port=5672, credentials=pika.PlainCredentials('guest', 'guest'))
-    try:
-        connection = pika.BlockingConnection(connection_params)
-        channel = connection.channel()
-        channel.queue_declare(queue=QUEUE_NAME, durable=True)
-        channel.basic_consume(queue=QUEUE_NAME, on_message_callback=process_order, auto_ack=True)
-        channel.start_consuming()
-    except Exception as e:
-        print(f"Erreur RabbitMQ: {e}")
-        time.sleep(5)
-        start_consuming()
+    while True:
+        try:
+            connection = pika.BlockingConnection(connection_params)
+            channel = connection.channel()
+            channel.queue_declare(queue=QUEUE_NAME, durable=True)
+            channel.basic_consume(queue=QUEUE_NAME, on_message_callback=process_order, auto_ack=True)
+            channel.start_consuming()
+        except Exception as e:
+            print(f"Connexion RabbitMQ perdue ({e}). Re-tentative dans 5s...")
+            time.sleep(5)
 
 if __name__ == "__main__":
     start_consuming()

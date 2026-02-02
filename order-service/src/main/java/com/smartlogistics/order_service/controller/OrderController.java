@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map; // Import nécessaire pour lire le JSON flexible
 
 @RestController
 @RequestMapping("/api/orders")
@@ -17,45 +18,47 @@ public class OrderController {
     private OrderRepository orderRepository;
 
     @Autowired
-    private RabbitTemplate rabbitTemplate; // <--- Injection de RabbitMQ
+    private RabbitTemplate rabbitTemplate;
 
     // POST : Créer une commande
     @PostMapping
     public ResponseEntity<Order> createOrder(@RequestBody Order order) {
-        // 1. Sauvegarde en Base de Données (Postgres)
         Order savedOrder = orderRepository.save(order);
-
-        // 2. Publication de l'événement (RabbitMQ)
-        // On envoie l'objet complet. Grâce à notre config, il sera converti en JSON automatiquement.
-        // Routing key : "order.created" -> va atterrir dans "orders.queue"
-        rabbitTemplate.convertAndSend("logistics.exchange", "order.created", savedOrder);
-        
+        rabbitTemplate.convertAndSend("orders.queue", savedOrder); // Envoie l'objet directement (converti en JSON)
         System.out.println("📤 Commande envoyée à RabbitMQ : ID " + savedOrder.getId());
-
         return ResponseEntity.ok(savedOrder);
+    }
+
+    // PUT : Mettre à jour la zone, l'index ET le livreur (Appelé par Python)
+    @PutMapping("/{id}/zone")
+    public ResponseEntity<Order> updateOrderZone(@PathVariable Long id, @RequestBody Map<String, Object> payload) {
+        return orderRepository.findById(id)
+                .map(order -> {
+                    // 1. Mise à jour de la Zone
+                    if (payload.containsKey("zoneId")) {
+                        order.setZoneId((Integer) payload.get("zoneId"));
+                    }
+                    
+                    // 2. Mise à jour de l'Ordre de passage (TSP)
+                    if (payload.containsKey("deliveryIndex")) {
+                        order.setDeliveryIndex((Integer) payload.get("deliveryIndex"));
+                    }
+
+                    // 3. Mise à jour du Livreur (CORRECTIF ICI)
+                    if (payload.containsKey("driverName")) {
+                        order.setDriverName((String) payload.get("driverName"));
+                    }
+
+                    // Changement de statut
+                    order.setStatus(com.smartlogistics.order_service.model.OrderStatus.ASSIGNED);
+                    
+                    return ResponseEntity.ok(orderRepository.save(order));
+                })
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping
     public ResponseEntity<List<Order>> getAllOrders() {
         return ResponseEntity.ok(orderRepository.findAll());
-    }
-
-    // PUT : Mettre à jour la zone d'une commande (Appelé par Python)
-    @PutMapping("/{id}/zone")
-    public ResponseEntity<Order> updateOrderZone(@PathVariable Long id, @RequestBody java.util.Map<String, Integer> payload) {
-        return orderRepository.findById(id)
-                .map(order -> {
-                    if(payload.containsKey("zoneId")) {
-                        order.setZoneId(payload.get("zoneId"));
-                    }
-                    
-                    if(payload.containsKey("deliveryIndex")) {
-                        order.setDeliveryIndex(payload.get("deliveryIndex"));
-                    }
-                    
-                    order.setStatus(com.smartlogistics.order_service.model.OrderStatus.ASSIGNED);
-                    return ResponseEntity.ok(orderRepository.save(order));
-                })
-                .orElse(ResponseEntity.notFound().build());
     }
 }

@@ -30,6 +30,8 @@ public class Order {
     private BigDecimal price;
     
     private Integer deliveryIndex;
+    
+    private String driverName;
 
     private LocalDateTime createdAt;
 
