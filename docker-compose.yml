@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 1. Base de données Centrale (PostgreSQL + Extension Géospatiale)
+  # --- INFRASTRUCTURE ---
   postgres-db:
     image: postgis/postgis:15-3.3-alpine
     container_name: logistics-db
@@ -11,39 +11,17 @@ services:
       POSTGRES_DB: logistics_db
     ports:
       - "5434:5432"
-    networks:
-      - logistics-network
     volumes:
       - postgres_data:/var/lib/postgresql/data
-
-  # 2. Interface graphique pour gérer la BDD 
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: logistics-pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@smartlogistics.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
-    depends_on:
-      - postgres-db
     networks:
       - logistics-network
+    # VÉRIFICATION DE SANTÉ (Attend que la base soit prête)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d logistics_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # 3. Message Broker (RabbitMQ) pour la communication asynchrone
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: logistics-broker
-    ports:
-      - "5672:5672"      # Port pour la communication Java/Python
-      - "15672:15672"    # Interface web de management
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-    networks:
-      - logistics-network
-
-  # 4. Base de données pour le Fleet Service 
   postgres-fleet:
     image: postgis/postgis:15-3.3-alpine
     container_name: fleet-db
@@ -52,16 +30,106 @@ services:
       POSTGRES_PASSWORD: password123
       POSTGRES_DB: fleet_db
     ports:
-      - "5435:5432" 
+      - "5435:5432"
+    volumes:
+      - fleet_data:/var/lib/postgresql/data
     networks:
       - logistics-network
-    volumes:
-      - fleet_data:/var/lib/postgresql/data    
+    # VÉRIFICATION DE SANTÉ
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d fleet_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-networks:
-  logistics-network:
-    driver: bridge
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - logistics-network
+    # VÉRIFICATION DE SANTÉ
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  # --- BACKEND JAVA ---
+  order-service:
+    build: ./order-service
+    container_name: order-service
+    ports:
+      - "8081:8081"
+    environment:
+      - DB_HOST=postgres-db
+      - DB_PORT=5432
+      - RABBITMQ_HOST=rabbitmq
+      - SERVER_PORT=8081
+    depends_on:
+      postgres-db:
+        condition: service_healthy # ATTEND QUE LA DB SOIT PRÊTE
+      rabbitmq:
+        condition: service_healthy # ATTEND QUE RABBITMQ SOIT PRÊT
+    networks:
+      - logistics-network
+    restart: on-failure # Redémarre en cas de crash
+
+  fleet-service:
+    build: ./fleet-service
+    container_name: fleet-service
+    ports:
+      - "8082:8082"
+    environment:
+      - DB_HOST=postgres-fleet
+      - DB_PORT=5432
+      - SERVER_PORT=8082
+    depends_on:
+      postgres-fleet:
+        condition: service_healthy
+    networks:
+      - logistics-network
+    restart: on-failure
+
+  # --- IA PYTHON ---
+  optimization-service:
+    build: ./optimization-service
+    container_name: ai-engine
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - ORDER_SERVICE_URL=http://order-service:8081
+      - FLEET_SERVICE_URL=http://fleet-service:8082
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      order-service:
+        condition: service_started
+      fleet-service:
+        condition: service_started
+    networks:
+      - logistics-network
+    restart: on-failure
+
+  # --- FRONTEND ---
+  frontend:
+    build: ./frontend
+    container_name: frontend-ui
+    ports:
+      - "3000:3000"
+    environment:
+      - WATCHPACK_POLLING=true
+    depends_on:
+      - order-service
+    networks:
+      - logistics-network
 
 volumes:
   postgres_data:
   fleet_data:
+
+networks:
+  logistics-network:
+    driver: bridge

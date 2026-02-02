@@ -3,11 +3,16 @@ import json
 import time
 import numpy as np
 import requests
+import os
 from sklearn.cluster import KMeans
 from scipy.spatial.distance import cdist
 
-# CONFIGURATION
-RABBITMQ_HOST = 'localhost'
+# --- CONFIGURATION (DOCKER READY) ---
+# Si on est dans Docker, on utilise les noms des services. Sinon, localhost.
+RABBITMQ_HOST = os.getenv('RABBITMQ_HOST', 'localhost')
+ORDER_SERVICE_URL = os.getenv('ORDER_SERVICE_URL', 'http://localhost:8081')
+FLEET_SERVICE_URL = os.getenv('FLEET_SERVICE_URL', 'http://localhost:8082')
+
 QUEUE_NAME = 'orders.queue'
 BATCH_SIZE = 3 
 N_CLUSTERS = 2 
@@ -42,14 +47,13 @@ def process_batch():
     kmeans.fit(coords)
     labels = kmeans.labels_
     
-    print(f"📊 Assignation intelligente...")
+    print(f"📊 Assignation intelligente en cours...")
     
     for zone_id in range(N_CLUSTERS):
-        # 2. APPEL AU FLEET SERVICE (Nouveau !)
-        # On demande : "Qui est le chef de la Zone X ?"
+        # 2. APPEL AU FLEET SERVICE (Via URL dynamique)
         driver_name = "En attente"
         try:
-            fleet_url = f"http://localhost:8082/api/drivers/zone/{zone_id}"
+            fleet_url = f"{FLEET_SERVICE_URL}/api/drivers/zone/{zone_id}"
             resp = requests.get(fleet_url)
             if resp.status_code == 200 and resp.json():
                 driver_data = resp.json()
@@ -72,13 +76,13 @@ def process_batch():
             global_idx = indices_in_zone[local_idx]
             order = orders_buffer[global_idx]
             
-            # 4. MISE À JOUR ORDER SERVICE
+            # 4. MISE À JOUR ORDER SERVICE (Via URL dynamique)
             try:
-                url = f"http://localhost:8081/api/orders/{order['id']}/zone"
+                url = f"{ORDER_SERVICE_URL}/api/orders/{order['id']}/zone"
                 payload = {
                     "zoneId": int(zone_id),
                     "deliveryIndex": sequence_number + 1,
-                    "driverName": driver_name # On envoie le nom !
+                    "driverName": driver_name
                 }
                 requests.put(url, json=payload)
                 print(f"    ✅ {sequence_number+1}. {order['customerName']} -> {driver_name}")
@@ -99,17 +103,19 @@ def process_order(ch, method, properties, body):
         print(f" [!] Erreur: {e}")
 
 def start_consuming():
-    print(f" [*] IA prête. En attente de commandes... (Batch: {BATCH_SIZE})")
+    print(f" [*] IA prête. Connexion à RabbitMQ ({RABBITMQ_HOST})...")
     connection_params = pika.ConnectionParameters(host=RABBITMQ_HOST, port=5672, credentials=pika.PlainCredentials('guest', 'guest'))
+    
     while True:
         try:
             connection = pika.BlockingConnection(connection_params)
             channel = connection.channel()
             channel.queue_declare(queue=QUEUE_NAME, durable=True)
             channel.basic_consume(queue=QUEUE_NAME, on_message_callback=process_order, auto_ack=True)
+            print(" [*] Connecté ! En attente de commandes...")
             channel.start_consuming()
         except Exception as e:
-            print(f"Connexion RabbitMQ perdue ({e}). Re-tentative dans 5s...")
+            print(f" [!] Connexion RabbitMQ échouée ({e}). Nouvelle tentative dans 5s...")
             time.sleep(5)
 
 if __name__ == "__main__":

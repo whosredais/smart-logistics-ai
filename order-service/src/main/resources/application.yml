@@ -7,7 +7,7 @@ spring:
   
   # Configuration Base de Données
   datasource:
-    url: jdbc:postgresql://localhost:5434/logistics_db
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5434}/logistics_db
     username: admin
     password: password123
     driver-class-name: org.postgresql.Driver
@@ -22,7 +22,7 @@ spring:
 
   # Configuration RabbitMQ (NOUVEAU)
   rabbitmq:
-    host: localhost
+    host: ${RABBITMQ_HOST:localhost}
     port: 5672
     username: guest
     password: guest

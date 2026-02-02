@@ -7,7 +7,7 @@ spring:
   
   datasource:
     # On se connecte au port 5435 (celui défini dans docker-compose pour fleet-db)
-    url: jdbc:postgresql://localhost:5435/fleet_db
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5435}/fleet_db
     username: admin
     password: password123
     driver-class-name: org.postgresql.Driver

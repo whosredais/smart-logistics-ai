@@ -4,3 +4,5 @@ pika
 scikit-learn
 numpy
 pandas
+scipy
+requests
