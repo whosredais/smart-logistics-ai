@@ -31,6 +31,13 @@ Ce projet démontre une intégration complexe entre **Java Spring Boot**, **Pyth
 - [x] **WebSockets :** Dashboard temps réel (KPIs, Logs, Carte).
 - [x] **Full Dockerization :** Conteneurisation de tous les services (Java, Python, Next.js, DBs).
 
+## 📷 Screenshots
+
+**Dashboard**
+
+![Dashboard ](![alt text](image.png))
+
+
 ## 🏃‍♂️ Installation & Lancement (Docker)
 
 Le projet est entièrement "Dockerisé". Vous n'avez besoin que de Docker installé sur votre machine.
